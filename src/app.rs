@@ -4,12 +4,11 @@ use std::error::Error;
 use geojson::{GeoJson, Geometry, Value};
 // use reqwest::{ClientBuilder, error::Error};
 
-
 pub struct App<'a> {
     pub title: &'a str,
     pub should_quit: bool,
     pub terminals: Vec<Terminal<'a>>,
-    pub routes: Vec<Route<'a>>,
+    pub routes: Vec<Route>,
     pub enhanced_graphics: bool,
 }
 
@@ -23,18 +22,17 @@ pub struct Terminal<'a> {
 #[derive(Debug, Clone)]
 pub enum RouteType {
     State,
-    County
+    County,
 }
 
 #[derive(Debug, Clone)]
-pub struct Route<'a> {
-    pub name: &'a str,
-    pub route_type: RouteType
+pub struct Route {
+    pub name: String,
+    pub route_type: RouteType,
 }
 
 impl<'a> App<'a> {
     pub fn new(title: &'a str, enhanced_graphics: bool) -> App<'a> {
-        
         let app = App {
             title,
             should_quit: false,
@@ -91,58 +89,57 @@ impl<'a> App<'a> {
     }
     pub fn on_tick(&mut self) {}
 
-    pub async fn load_ferry_routes(&self) -> reqwest::Result<()> {
-    println!("load_ferry_routes");
+    pub async fn load_ferry_routes(&mut self) -> reqwest::Result<()> {
+        println!("load_ferry_routes");
 
         let resp = reqwest::Client::builder()
-    .danger_accept_invalid_certs(true)
-    .build()
-    .unwrap()
-    .get("https://data.wsdot.wa.gov/arcgis/rest/services/Shared/FerryRoutes/MapServer/1/query?outFields=*&where=1=1&f=geojson")
-    .send()
-        .await?
-        .json::<GeoJson>()
-        .await?;
+            .danger_accept_invalid_certs(true)
+            .build()
+            .unwrap()
+            .get("https://data.wsdot.wa.gov/arcgis/rest/services/Shared/FerryRoutes/MapServer/1/query?outFields=*&where=1=1&f=geojson")
+            .send()
+                .await?
+                .json::<GeoJson>()
+                .await?;
 
         // pretty print the whole GeoJSON response
         // println!("{resp:#?}");
+        let mut updated_routes: Vec<Route> = vec![];
 
         match resp {
             GeoJson::FeatureCollection(ref ctn) => {
-                println!("FeatureCollection");
-                for feature in &ctn.features {
-                    if let Some(ref geom) = feature.geometry {
-                        // for prop in &feature.properties {
-                        //     for v in prop {
-                        //         println!("{} = {}", v.0, v.1)
-                        //     }
-                        // }
+                // println!("FeatureCollection");
+                // for feature in &ctn.features {
+                //     if let Some(ref geom) = feature.geometry {
+                //         // for prop in &feature.properties {
+                //         //     for v in prop {
+                //         //         println!("{} = {}", v.0, v.1)
+                //         //     }
+                //         // }
 
-                        self.match_geometry(geom)
-                    }
-                }
+                //         self.match_geometry(geom)
+                //     }
+                // }
 
-                let filtered = &ctn
+                let mut filtered = ctn
                     .features
                     .iter()
                     .filter_map(|feature| {
                         for prop in &feature.properties {
                             let mut marked = false;
-                            let mut name = "";
+                            let mut name = String::from("");
                             for v in prop {
-                                
                                 // is this a state or county route?
                                 if "State" == v.1 || "County" == v.1 {
                                     marked = true;
-                                } 
+                                }
 
                                 // extract the route name
                                 if "Display" == v.0 {
-                                    name = v.1.as_str().unwrap();
-                                } else {
-                                    println!("Field name {}", v.0)
+                                    name = v.1.to_string().replace("\"", "");
+                                    // } else {
+                                    //     println!("Field name {}", v.0)
                                 }
-                                
                             }
                             if marked {
                                 return Some(name);
@@ -150,24 +147,26 @@ impl<'a> App<'a> {
                         }
                         None
                     })
-                    .filter_map(|f| {
-                        if f.is_empty() {
-                            return None
+                    .filter_map(|route_name| {
+                        if route_name.is_empty() {
+                            return None;
                         }
-                        println!("{f:?}");
-                        Some(Route{
-                            name: f,
-                            route_type: RouteType::State
-                        })
-                    // }).for_each(|f| {
-                    //     println!("{f:#?}");
-                    }).reduce(|f| {
+                        println!("{route_name:?}");
+                        let r = Route {
+                            name: route_name,
+                            route_type: RouteType::State,
+                        };
 
-                    });
+                        Some(r)
+                        // }).for_each(|f| {
+                        //     println!("{f:#?}");
+                    })
+                    .collect::<Vec<Route>>();
+                // .for_each(|r| {
+                //     updated_routes.push(r)
+                // });
 
-                let x:Vec<Route> = filtered.red
-                // println!("{x:#?}");
-                //self.update_routes(c);
+                updated_routes.append(&mut filtered);
             }
             GeoJson::Feature(ref feature) => {
                 println!("Feature");
@@ -177,12 +176,23 @@ impl<'a> App<'a> {
             }
             GeoJson::Geometry(ref geometry) => self.match_geometry(geometry),
         }
+
+        self.update_routes(updated_routes);
+
+        self.print_routes();
+
         // println!("{:#?}", resp);
         Ok(())
     }
 
-    fn update_routes<'b> (&self, routes: Vec<Route>){
-        // self.routes = routes;
+    fn update_routes(&mut self, routes: Vec<Route>) {
+        self.routes = routes;
+    }
+
+    fn print_routes(&self) {
+        self.routes.iter().for_each(|x| {
+            println!("{x:#?}");
+        });
     }
 
     /// Process GeoJSON geometries
@@ -190,10 +200,8 @@ impl<'a> App<'a> {
         match &geom.value {
             Value::LineString(l) => {
                 println!("Matched a LineString");
-                l.iter().for_each(|v| {
-                    println!("{},{}", v[0], v[1])
-                })
-            },
+                l.iter().for_each(|v| println!("{},{}", v[0], v[1]))
+            }
             Value::Polygon(_) => println!("Matched a Polygon"),
             Value::MultiPolygon(_) => println!("Matched a MultiPolygon"),
             Value::GeometryCollection(ref gc) => {

@@ -1,4 +1,4 @@
-use crate::app::{App, Terminal};
+use crate::app::{App, Terminal, RouteType};
 use crate::map::{Map, MapResolution};
 
 use tui::{
@@ -45,13 +45,21 @@ where
         .fg(Color::Red)
         .add_modifier(Modifier::RAPID_BLINK | Modifier::CROSSED_OUT);
 
-    let rows = app.terminals.iter().map(|s| {
-        let style = if s.status == "Up" {
-            up_style
-        } else {
-            failure_style
-        };
-        Row::new(vec![s.name, s.location, s.status]).style(style)
+    // let rows = app.terminals.iter().map(|s| {
+    //     let style = if s.status == "Up" {
+    //         up_style
+    //     } else {
+    //         failure_style
+    //     };
+    //     Row::new(vec![s.name, s.location, s.status]).style(style)
+    // });
+    let rows = app.routes.iter().map(|s| {
+        // let style = if s.route_type == RouteType::State {
+        //     up_style
+        // } else {
+        //     failure_style
+        // };
+        Row::new(vec![s.name.to_string() , "".to_owned() , "".to_owned()]).style(up_style)
     });
     let table = Table::new(rows)
         .header(
