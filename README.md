@@ -8,7 +8,7 @@ Potential features:
 
 # Why?
 
-Been meaning to use my (lack of) Rust skills into something practical that combines my personal life passions: Maps, Transportation infrastructure and Continuous Learning.
+I have been meaning to use my (lack of) Rust skills into something practical that combines my personal life passions: Maps, Transportation infrastructure and Continuous Learning.
 
 # How?
 
